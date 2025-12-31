@@ -45,7 +45,7 @@ pub fn prepare_font(font_data: Arc<Vec<u8>>) -> Result<Arc<FontData>> {
 }
 
 pub fn convert(input: &Path, output: &Path, font: Arc<FontData>) -> Result<()> {
-    println!("Step 1: Reading file {:?}", input);
+    log::info!("Starting conversion for: {:?}", input);
     let file_type = FileType::from_path(input);
     
     let content = match file_type {
@@ -54,7 +54,7 @@ pub fn convert(input: &Path, output: &Path, font: Arc<FontData>) -> Result<()> {
         FileType::Csv => String::new(), 
         _ => fs::read_to_string(input).context("Failed to read file")?,
     };
-    println!("Step 2: File processed. Type: {:?}", file_type);
+    log::info!("File type identified as: {:?}. Content loaded.", file_type);
 
     let font_family = genpdf::fonts::FontFamily {
         regular: font.as_ref().clone(),
@@ -63,7 +63,7 @@ pub fn convert(input: &Path, output: &Path, font: Arc<FontData>) -> Result<()> {
         bold_italic: font.as_ref().clone(),
     };
 
-    println!("Step 3: Creating PDF document structure");
+    log::debug!("Creating PDF document structure");
     let mut doc = genpdf::Document::new(font_family);
     doc.set_title("Converted Document");
     doc.set_minimal_conformance();
@@ -73,7 +73,7 @@ pub fn convert(input: &Path, output: &Path, font: Arc<FontData>) -> Result<()> {
     decorator.set_margins(10);
     doc.set_page_decorator(decorator);
 
-    println!("Step 4: Rendering content to document");
+    log::debug!("Rendering content to document");
     match file_type {
         FileType::Markdown => render_markdown(&content, &mut doc),
         FileType::Json => render_json(&content, &mut doc)?,
@@ -82,16 +82,21 @@ pub fn convert(input: &Path, output: &Path, font: Arc<FontData>) -> Result<()> {
         FileType::Html => render_html(&content, &mut doc),
         FileType::Csv => render_csv(input, &mut doc)?,
         FileType::Image => render_image(input, &mut doc)?,
-        FileType::Unknown => return Err(anyhow::anyhow!("Unknown file type")),
+        FileType::Unknown => {
+            let msg = "Unknown file type";
+            log::error!("{}", msg);
+            return Err(anyhow::anyhow!(msg));
+        }
     }
 
-    println!("Step 5: Rendering PDF to file {:?}", output);
+    log::info!("Rendering PDF to file {:?}", output);
     doc.render_to_file(output).context("Failed to render PDF")?;
-    println!("Step 6: Conversion complete for {:?}", input);
+    log::info!("Conversion complete for {:?}", input);
     Ok(())
 }
 
 fn read_docx(path: &Path) -> Result<String> {
+    log::debug!("Reading DOCX file: {:?}", path);
     let file = fs::File::open(path)?;
     let mut archive = ZipArchive::new(file)?;
     let mut document_xml = archive.by_name("word/document.xml")?;
@@ -149,6 +154,7 @@ fn render_html(content: &str, doc: &mut genpdf::Document) {
     if let Ok(text) = html2text::from_read(content.as_bytes(), 80) {
         render_text(&text, doc);
     } else {
+        log::warn!("Failed to parse HTML content");
         doc.push(elements::Paragraph::new("Failed to parse HTML").styled(style::Style::new().with_color(style::Color::Rgb(255, 0, 0))));
     }
 }
@@ -178,6 +184,7 @@ fn render_image(path: &Path, doc: &mut genpdf::Document) -> Result<()> {
              doc.push(img);
         },
         Err(e) => {
+             log::error!("Error loading image {}: {}", path.display(), e);
              doc.push(elements::Paragraph::new(format!("Error loading image: {}", e)));
         }
     }

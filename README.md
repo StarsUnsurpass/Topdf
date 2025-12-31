@@ -1,5 +1,8 @@
 # Topdf - 通用文档转 PDF 工具
 
+**项目作者:** StarsUnsurpass ([主页](https://github.com/StarsUnsurpass))
+**项目地址:** [https://github.com/StarsUnsurpass/Topdf](https://github.com/StarsUnsurpass/Topdf)
+
 Topdf 是一款基于 Rust 开发的高性能、跨平台文档转换工具。它拥有现代化的图形界面，支持将多种常见格式的文件一键转换为 PDF。
 
 ## 主要特性
