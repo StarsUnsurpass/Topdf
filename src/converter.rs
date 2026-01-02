@@ -8,6 +8,7 @@ use serde_json::Value;
 use std::io::Read;
 use zip::ZipArchive;
 use std::sync::Arc;
+use calamine::{Reader, open_workbook, Xlsx, Xls};
 
 #[derive(Debug, Clone, Copy)]
 pub enum FileType {
@@ -19,6 +20,9 @@ pub enum FileType {
     Html,
     Csv,
     Image,
+    Yaml,
+    Toml,
+    Excel,
     Unknown,
 }
 
@@ -33,6 +37,9 @@ impl FileType {
             Some("html") | Some("htm") => FileType::Html,
             Some("csv") => FileType::Csv,
             Some("png") | Some("jpg") | Some("jpeg") | Some("bmp") => FileType::Image,
+            Some("yaml") | Some("yml") => FileType::Yaml,
+            Some("toml") => FileType::Toml,
+            Some("xlsx") | Some("xls") => FileType::Excel,
             _ => FileType::Unknown,
         }
     }
@@ -51,7 +58,7 @@ pub fn convert(input: &Path, output: &Path, font: Arc<FontData>) -> Result<()> {
     let content = match file_type {
         FileType::Image => String::new(), 
         FileType::Docx => read_docx(input)?,
-        FileType::Csv => String::new(), 
+        FileType::Csv | FileType::Excel => String::new(), 
         _ => fs::read_to_string(input).context("Failed to read file")?,
     };
     log::info!("File type identified as: {:?}. Content loaded.", file_type);
@@ -82,6 +89,9 @@ pub fn convert(input: &Path, output: &Path, font: Arc<FontData>) -> Result<()> {
         FileType::Html => render_html(&content, &mut doc),
         FileType::Csv => render_csv(input, &mut doc)?,
         FileType::Image => render_image(input, &mut doc)?,
+        FileType::Yaml => render_yaml(&content, &mut doc)?,
+        FileType::Toml => render_toml(&content, &mut doc)?,
+        FileType::Excel => render_excel(input, &mut doc)?,
         FileType::Unknown => {
             let msg = "Unknown file type";
             log::error!("{}", msg);
@@ -135,6 +145,76 @@ fn render_json(content: &str, doc: &mut genpdf::Document) -> Result<()> {
     doc.push(elements::Break::new(1.0));
     for line in pretty.lines() {
         doc.push(elements::Paragraph::new(line).styled(style::Style::new().with_font_size(10)));
+    }
+    Ok(())
+}
+
+fn render_yaml(content: &str, doc: &mut genpdf::Document) -> Result<()> {
+    doc.push(elements::Paragraph::new("YAML Content:").styled(style::Style::new().bold()));
+    doc.push(elements::Break::new(1.0));
+    // Try to parse as Value to validate, or just print content if valid.
+    // Ideally we pretty print it, but for now we just print the content if it's text.
+    // If we want to re-serialize to ensure pretty printing:
+    match serde_yaml::from_str::<serde_yaml::Value>(content) {
+        Ok(v) => {
+            let pretty = serde_yaml::to_string(&v)?;
+             for line in pretty.lines() {
+                doc.push(elements::Paragraph::new(line).styled(style::Style::new().with_font_size(10)));
+            }
+        },
+        Err(_) => {
+             // Fallback to raw text if parse fails
+             for line in content.lines() {
+                doc.push(elements::Paragraph::new(line).styled(style::Style::new().with_font_size(10)));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn render_toml(content: &str, doc: &mut genpdf::Document) -> Result<()> {
+    doc.push(elements::Paragraph::new("TOML Content:").styled(style::Style::new().bold()));
+    doc.push(elements::Break::new(1.0));
+    // TOML usually is pretty enough, but we can try to re-serialize.
+    match toml::from_str::<toml::Value>(content) {
+        Ok(v) => {
+            let pretty = toml::to_string_pretty(&v)?;
+            for line in pretty.lines() {
+                doc.push(elements::Paragraph::new(line).styled(style::Style::new().with_font_size(10)));
+            }
+        },
+        Err(_) => {
+            for line in content.lines() {
+                doc.push(elements::Paragraph::new(line).styled(style::Style::new().with_font_size(10)));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn render_excel(path: &Path, doc: &mut genpdf::Document) -> Result<()> {
+    doc.push(elements::Paragraph::new("Excel Content:").styled(style::Style::new().bold()));
+    doc.push(elements::Break::new(1.0));
+    
+    // Attempt to open as XLSX first, then XLS
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+    
+    if ext == "xlsx" {
+        let mut workbook: Xlsx<_> = open_workbook(path).context("Cannot open Excel file")?;
+        if let Some(Ok(r)) = workbook.worksheet_range_at(0) {
+             for row in r.rows() {
+                 let line = row.iter().map(|c| c.to_string()).collect::<Vec<String>>().join(" | ");
+                 doc.push(elements::Paragraph::new(line).styled(style::Style::new().with_font_size(10)));
+             }
+        }
+    } else if ext == "xls" {
+        let mut workbook: Xls<_> = open_workbook(path).context("Cannot open Excel file")?;
+         if let Some(Ok(r)) = workbook.worksheet_range_at(0) {
+             for row in r.rows() {
+                 let line = row.iter().map(|c| c.to_string()).collect::<Vec<String>>().join(" | ");
+                 doc.push(elements::Paragraph::new(line).styled(style::Style::new().with_font_size(10)));
+             }
+        }
     }
     Ok(())
 }

@@ -92,7 +92,7 @@ impl App {
             Message::AddFiles => {
                 return Task::perform(async {
                     let files = rfd::AsyncFileDialog::new()
-                        .add_filter("Documents", &["md", "json", "xml", "txt", "docx", "html", "htm", "csv", "png", "jpg", "jpeg", "bmp", "rs", "py", "js", "c", "cpp"])
+                        .add_filter("Documents", &["md", "json", "xml", "txt", "docx", "html", "htm", "csv", "png", "jpg", "jpeg", "bmp", "rs", "py", "js", "c", "cpp", "yaml", "yml", "toml", "xlsx", "xls"])
                         .pick_files()
                         .await;
                     
@@ -521,7 +521,7 @@ impl App {
             text("支持的文件格式").size(18).color(success_color),
             column![
                 text("• 文档: DOCX, TXT").size(14).color(text_color),
-                text("• 数据: JSON, XML, CSV").size(14).color(text_color),
+                text("• 数据: JSON, XML, CSV, YAML, TOML, Excel").size(14).color(text_color),
                 text("• 网页: HTML, Markdown (MD)").size(14).color(text_color),
                 text("• 图片: PNG, JPG, BMP").size(14).color(text_color),
                 text("• 代码: RS, PY, JS, C, CPP").size(14).color(text_color),
